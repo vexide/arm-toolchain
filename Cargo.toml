@@ -1,0 +1,69 @@
+[package]
+name = "arm-toolchain"
+version = "0.1.0"
+edition = "2024"
+description = "Manage and use the embedded ARM toolchain"
+authors = ["Lewis McClelland <lewis@lewismcclelland.me>"]
+categories = [
+    "embedded",
+    "development-tools::build-utils",
+    "web-programming::http-client",
+]
+keywords = ["arm", "embedded", "cross-compilation", "toolchain-management"]
+repository = "https://github.com/vexide/arm-toolchain"
+
+[dependencies]
+camino = "1.2.1"
+data-encoding = { version = "2.9.0" }
+directories = "6.0.0"
+fs-err = { version = "3.2.0", features = ["tokio"] }
+futures = { version = "0.3.31", default-features = false }
+miette = "7.6.0"
+octocrab = "0.48.1"
+reqwest = { version = "0.12.24", features = [
+    "stream",
+] }
+scopeguard = "1.2.0"
+sha2 = "0.10.9"
+strum = { version = "0.27.2", features = ["derive"] }
+thiserror = "2.0.17"
+tokio = { version = "1.48.0", features = ["io-util", "macros"] }
+tokio-util = "0.7.17"
+tracing = "0.1.43"
+trash = "5.2.5"
+liblzma = "0.4.5"
+fs_extra = "1.3.0"
+zip = "6.0.0"
+tar = "0.4.44"
+tempfile = "3.23.0"
+owo-colors = { version = "4.2.3", optional = true }
+toml = { version = "0.9.8", optional = true }
+inquire = { version = "0.9.1", optional = true }
+clap = { version = "4.5.53", optional = true, features = ["derive"] }
+indicatif = { version = "0.18.3", optional = true }
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"], optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+dmg = "0.1.2"
+
+[[bin]]
+name = "arm-toolchain"
+required-features = ["bin"]
+
+[features]
+default = ["cli"]
+bin = [
+    "cli",
+    "tokio/rt",
+    "tokio/rt-multi-thread",
+    "miette/fancy",
+    "dep:tracing-subscriber"
+]
+cli = [
+    "dep:owo-colors",
+    # "dep:toml",
+    "dep:inquire",
+    "dep:indicatif",
+    "dep:clap",
+    "tokio/signal",
+]
