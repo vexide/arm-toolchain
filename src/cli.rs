@@ -135,7 +135,7 @@ pub async fn install(cfg: InstallConfig) -> Result<(), CliError> {
         }
         InstallState::DownloadFinish => {
             download_bar.disable_steady_tick();
-            download_bar.finish();
+            download_bar.finish_with_message("Download complete");
         }
         InstallState::VerifyingBegin { asset_size } => {
             verify_bar.reset();
@@ -145,7 +145,7 @@ pub async fn install(cfg: InstallConfig) -> Result<(), CliError> {
             verify_bar.set_position(bytes_read);
         }
         InstallState::VerifyingFinish => {
-            verify_bar.finish();
+            verify_bar.finish_with_message("Verification complete");
         }
         InstallState::ExtractBegin => {
             extract_bar.set_style(PROGRESS_STYLE_SPINNER.clone());
@@ -182,6 +182,12 @@ pub static PROGRESS_STYLE_DL: LazyLock<ProgressStyle> = LazyLock::new(|| {
     .progress_chars(PROGRESS_CHARS)
 });
 
+pub static PROGRESS_STYLE_DL_MSG: LazyLock<ProgressStyle> = LazyLock::new(|| {
+    ProgressStyle::with_template("{percent:>3.bold}% [{bar:40.blue}] ({bytes}/{total_bytes}) {msg}")
+    .expect("progress style valid")
+    .progress_chars(PROGRESS_CHARS)
+});
+
 pub static PROGRESS_STYLE_VERIFY: LazyLock<ProgressStyle> = LazyLock::new(|| {
     ProgressStyle::with_template("{percent:>3.bold}% [{bar:40.green}] {msg} ({eta} remaining)")
         .expect("progress style valid")
@@ -195,7 +201,7 @@ pub static PROGRESS_STYLE_EXTRACT: LazyLock<ProgressStyle> = LazyLock::new(|| {
 });
 
 pub static PROGRESS_STYLE_SPINNER: LazyLock<ProgressStyle> = LazyLock::new(|| {
-    ProgressStyle::with_template("{spinner:.green} ({bytes}) {msg}")
+    ProgressStyle::with_template("{spinner:.green} {msg}")
         .expect("progress style valid")
         .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏✓")
 });

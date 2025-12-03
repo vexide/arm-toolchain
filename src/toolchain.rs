@@ -480,6 +480,7 @@ impl ToolchainClient {
         cancel_token.check_cancellation(ToolchainError::Cancelled)?;
 
         debug!(archive = ?archive_destination, ?extract_location, "Extracting downloaded archive");
+        progress(InstallState::ExtractBegin);
 
         if extract_location.exists() {
             debug!("Destination folder already exists, removing it");
