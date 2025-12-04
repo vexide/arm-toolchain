@@ -20,8 +20,9 @@ fs-err = { version = "3.2.0", features = ["tokio"] }
 futures = { version = "0.3.31", default-features = false }
 miette = "7.6.0"
 octocrab = "0.48.1"
-reqwest = { version = "0.12.24", features = [
+reqwest = { version = "0.12.24", default-features = false, features = [
     "stream",
+    "rustls-tls",
 ] }
 scopeguard = "1.2.0"
 sha2 = "0.10.9"
@@ -50,6 +51,10 @@ dmg = "0.1.2"
 name = "arm-toolchain"
 required-features = ["bin"]
 
+[[bin]]
+name = "atrun"
+required-features = ["bin"]
+
 [features]
 default = ["cli"]
 bin = [
@@ -66,4 +71,5 @@ cli = [
     "dep:indicatif",
     "dep:clap",
     "tokio/signal",
+    "tokio/process",
 ]

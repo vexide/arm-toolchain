@@ -56,10 +56,7 @@ pub async fn extract_dmg(
     copy_folder(
         contents_path,
         destination_folder.to_owned(),
-        {
-            let progress = progress.clone();
-            move |state| progress(InstallState::ExtractCopy(state))
-        },
+        progress.clone(),
         cancel_token.clone(),
     )
     .await?;

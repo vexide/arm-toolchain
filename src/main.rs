@@ -1,10 +1,11 @@
-use arm_toolchain::cli::{InstallConfig, install};
+use arm_toolchain::{cli::{ArmToolchainCmd, InstallArgs, RunArgs, install, run}, toolchain::ToolchainClient};
 use clap::Parser;
 use tracing_subscriber::{EnvFilter, util::SubscriberInitExt};
 
 #[derive(clap::Parser)]
-enum ArmToolchain {
-    Install(InstallConfig),
+enum CliArgs {
+    #[clap(flatten)]
+    Cmd(ArmToolchainCmd),
 }
 
 #[tokio::main]
@@ -15,12 +16,8 @@ async fn main() -> miette::Result<()> {
         .finish()
         .init();
 
-    let args = ArmToolchain::parse();
-    match args {
-        ArmToolchain::Install(config) => {
-            install(config).await?;
-        }
-    }
+    let CliArgs::Cmd(args) = CliArgs::parse();
+    args.run().await?;
 
     Ok(())
 }

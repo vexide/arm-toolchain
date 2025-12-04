@@ -2,12 +2,14 @@
 //! such as DMG, ZIP, and TAR.XZ.
 
 use std::{
-    io::BufReader,
-    path::{Path, PathBuf},
-    sync::Arc,
+    fs::Permissions, io::BufReader, path::{Path, PathBuf}, sync::Arc
 };
 
-use fs_extra::dir::{CopyOptions, TransitProcess, TransitProcessResult, copy_with_progress};
+use fs_extra::dir::{
+    CopyOptions, TransitProcess, TransitProcessResult, copy_with_progress, get_dir_content,
+    get_dir_content2,
+};
+use futures::future::try_join_all;
 use liblzma::read::XzDecoder;
 use miette::Diagnostic;
 use tempfile::tempdir;
@@ -17,7 +19,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::debug;
 use zip::{read::root_dir_common_filter, result::ZipError};
 
-use crate::{CheckCancellation, fs, toolchain::ToolchainError};
+use crate::{CheckCancellation, fs, toolchain::{InstallState, ToolchainError}};
 
 #[cfg(target_os = "macos")]
 pub mod macos;
@@ -84,7 +86,7 @@ pub async fn extract_zip(
 pub async fn extract_tar_xz(
     tar_xz_file: fs::File,
     destination: PathBuf,
-    progress: impl FnMut(TransitProcess) + Send + 'static,
+    progress: Arc<dyn Fn(InstallState) + Send + Sync>,
     cancel_token: CancellationToken,
 ) -> Result<fs::File, ToolchainError> {
     let mut reader = BufReader::new(tar_xz_file.into_std().await);
@@ -138,7 +140,7 @@ async fn find_dir_contained_by(parent_dir: &Path) -> Result<PathBuf, ToolchainEr
 pub async fn mv(
     src: &Path,
     dst: &Path,
-    progress: impl FnMut(TransitProcess) + Send + 'static,
+    progress: Arc<dyn Fn(InstallState) + Send + Sync>,
     cancel_token: CancellationToken,
 ) -> Result<(), ToolchainError> {
     match fs::rename(src, dst).await {
@@ -163,33 +165,120 @@ pub async fn mv(
 async fn copy_folder(
     source: PathBuf,
     destination: PathBuf,
-    mut progress: impl FnMut(TransitProcess) + Send + 'static,
+    progress: Arc<dyn Fn(InstallState) + Send + Sync>,
     cancel_token: CancellationToken,
 ) -> Result<(), ToolchainError> {
     debug!("Copying folder");
 
     fs::create_dir_all(&destination).await?;
 
-    let tok = cancel_token.clone();
-    let task = spawn_blocking(move || {
-        let options = CopyOptions::new()
-            .copy_inside(true);
-        let handle = move |process_info: TransitProcess| {
-            progress(process_info);
-            if tok.is_cancelled() {
-                return TransitProcessResult::Abort;
+    // First enumerate files from the source & create destination directories.
+    let mut files = vec![];
+    let total_size = create_scaffolding(&source, &destination, &mut files, &cancel_token).await?;
+    let mut bytes_so_far = 0;
+
+    for (size, source_path, sym_type) in files {
+        let inner_path = Path::new(&source_path)
+            .strip_prefix(&source)
+            .expect("subdir path should have prefix of source directory");
+        let new_path = destination.join(inner_path);
+
+        if let Some(ty) = sym_type {
+            let ptr = fs::read_link(source_path).await?;
+
+            if ty == SymType::File {
+                #[cfg(unix)]
+                fs::symlink(ptr, &new_path).await?;
+                #[cfg(windows)]
+                fs::symlink_file(ptr, &new_path).await?;
+            } else {
+                #[cfg(unix)]
+                fs::symlink(ptr, &new_path).await?;
+                #[cfg(windows)]
+                fs::symlink_dir(ptr, &new_path).await?;
             }
 
-            TransitProcessResult::ContinueOrAbort
-        };
+            // fs::set_permissions(new_path, perms).await?;
+        } else {
+            fs::copy(source_path, new_path).await?;
+            bytes_so_far += size;
 
-        copy_with_progress(source, destination, &options, handle)
-    });
-
-    let outcome = task.await.unwrap();
-
-    cancel_token.check_cancellation(ToolchainError::Cancelled)?;
-    outcome.map_err(ExtractError::from)?;
+            progress(InstallState::ExtractCopy {
+                total_size,
+                bytes_copied: bytes_so_far,
+            })
+        }
+    }
 
     Ok(())
+}
+
+async fn create_scaffolding(
+    source: &Path,
+    destination: &Path,
+    files_vec: &mut Vec<(u64, PathBuf, Option<SymType>)>,
+    cancel_token: &CancellationToken,
+) -> Result<u64, ToolchainError> {
+    let mut bytes = 0;
+
+    let mut sub_dirs = vec![];
+    let mut mkdir_tasks = vec![];
+
+    let mut read_dir = fs::read_dir(source).await?;
+    while let Some(entry) = read_dir.next_entry().await? {
+        cancel_token.check_cancellation(ToolchainError::Cancelled)?;
+
+        let name = entry.file_name();
+        let path = entry.path();
+        let meta = entry.metadata().await?;
+
+        if meta.is_symlink() {
+            let ty = if meta.is_dir() {
+                SymType::Dir
+            } else {
+                SymType::File
+            };
+
+            files_vec.push((0, path, Some(ty)));
+            continue;
+        }
+
+        if meta.is_dir() {
+            sub_dirs.push(name.clone());
+            mkdir_tasks.push(async move {
+                let inner_path = Path::new(&path)
+                    .strip_prefix(source)
+                    .expect("subdir path should have prefix of source directory");
+                let new_path = destination.join(inner_path);
+
+                fs::create_dir(&new_path).await?;
+                fs::set_permissions(&new_path, meta.permissions()).await?;
+
+                Ok::<(), io::Error>(())
+            });
+        } else {
+            files_vec.push((meta.len(), path, None));
+            bytes += meta.len();
+        }
+    }
+
+    try_join_all(mkdir_tasks).await?;
+
+    for name in &sub_dirs {
+        bytes += Box::pin(create_scaffolding(
+            &source.join(name),
+            &destination.join(name),
+            files_vec,
+            cancel_token,
+        ))
+        .await?;
+    }
+
+    Ok(bytes)
+}
+
+#[derive(Debug, PartialEq)]
+enum SymType {
+    File,
+    Dir,
 }
