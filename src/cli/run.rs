@@ -13,9 +13,9 @@ pub struct RunArgs {
     /// Toolchain version override (default: the active version)
     #[arg(short = 'T', long)]
     toolchain: Option<ToolchainVersion>,
-    /// Set environment variables for cross-compilation
-    #[arg(long, default_value_t = true)]
-    cross_env: bool,
+    /// Disable environment variables set for cross-compilation
+    #[arg(long)]
+    no_cross_env: bool,
     /// The command to run with the modified environment
     command: OsString,
     /// Arguments to pass to the command.
@@ -41,12 +41,9 @@ pub async fn run(args: RunArgs) -> Result<Never, CliError> {
     cmd.args(args.args);
     cmd.env("PATH", path);
 
-    if args.cross_env {
+    if !args.no_cross_env {
         cmd.env("TARGET_CC", "clang");
-        cmd.env("CC", "clang");
-
         cmd.env("TARGET_AR", "llvm-ar");
-        cmd.env("AR", "llvm-ar");
     }
 
     let code = cmd.status().await?.code();
