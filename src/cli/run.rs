@@ -3,7 +3,10 @@ use std::{env, ffi::OsString, process::exit};
 use futures::never::Never;
 use tokio::process::Command;
 
-use crate::{cli::{CliError, get_toolchain}, toolchain::{ToolchainClient, ToolchainVersion}};
+use crate::{
+    cli::{CliError, get_toolchain},
+    toolchain::{ToolchainClient, ToolchainVersion},
+};
 
 #[derive(Debug, clap::Args)]
 pub struct RunArgs {

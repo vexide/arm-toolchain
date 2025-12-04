@@ -8,7 +8,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     cli::{
-        CliError, PROGRESS_STYLE_DL, PROGRESS_STYLE_EXTRACT, PROGRESS_STYLE_EXTRACT_SPINNER, PROGRESS_STYLE_VERIFY, ctrl_c_cancel, msg
+        CliError, PROGRESS_STYLE_DL, PROGRESS_STYLE_EXTRACT, PROGRESS_STYLE_EXTRACT_SPINNER,
+        PROGRESS_STYLE_VERIFY, ctrl_c_cancel, msg,
     },
     toolchain::{
         HostArch, HostOS, InstallState, ToolchainClient, ToolchainError, ToolchainRelease,

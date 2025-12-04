@@ -2,7 +2,9 @@
 //! such as DMG, ZIP, and TAR.XZ.
 
 use std::{
-    io::BufReader, path::{Path, PathBuf}, sync::Arc
+    io::BufReader,
+    path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use futures::future::try_join_all;
@@ -15,7 +17,10 @@ use tokio_util::sync::CancellationToken;
 use tracing::debug;
 use zip::{read::root_dir_common_filter, result::ZipError};
 
-use crate::{CheckCancellation, fs, toolchain::{InstallState, ToolchainError}};
+use crate::{
+    CheckCancellation, fs,
+    toolchain::{InstallState, ToolchainError},
+};
 
 #[cfg(target_os = "macos")]
 pub mod macos;

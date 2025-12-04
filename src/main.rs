@@ -1,5 +1,5 @@
 use arm_toolchain::cli::{ArmToolchainCmd, STYLES};
-use clap::{Parser, builder::styling};
+use clap::Parser;
 use tracing_subscriber::{EnvFilter, util::SubscriberInitExt};
 
 #[derive(clap::Parser)]

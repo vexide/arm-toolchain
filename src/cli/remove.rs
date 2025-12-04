@@ -1,22 +1,11 @@
-use std::{sync::Arc, time::Duration};
-
-use futures::future::{join_all, try_join_all};
+use futures::future::try_join_all;
 use humansize::DECIMAL;
 use indicatif::{MultiProgress, ProgressBar};
-use inquire::Confirm;
-use owo_colors::OwoColorize;
-use tokio::task::spawn_blocking;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    cli::{
-        CliError, PROGRESS_STYLE_DELETE, PROGRESS_STYLE_DELETE_SPINNER, PROGRESS_STYLE_DL,
-        PROGRESS_STYLE_EXTRACT, PROGRESS_STYLE_VERIFY, ctrl_c_cancel, msg,
-    },
-    toolchain::{
-        HostArch, HostOS, InstallState, RemoveProgress, ToolchainClient, ToolchainError,
-        ToolchainRelease, ToolchainVersion,
-    },
+    cli::{CliError, PROGRESS_STYLE_DELETE, PROGRESS_STYLE_DELETE_SPINNER, ctrl_c_cancel, msg},
+    toolchain::{RemoveProgress, ToolchainClient, ToolchainError, ToolchainVersion},
 };
 
 #[derive(Debug, clap::Parser)]
@@ -73,13 +62,9 @@ pub async fn remove(args: RemoveArgs) -> Result<(), CliError> {
 
         let cancel_token = ctrl_c_cancel();
         let multi = MultiProgress::new();
-        let bytes = remove_with_progress_bar(
-            client,
-            args.version.clone(),
-            cancel_token.clone(),
-            multi,
-        )
-        .await?;
+        let bytes =
+            remove_with_progress_bar(client, args.version.clone(), cancel_token.clone(), multi)
+                .await?;
 
         cancel_token.cancel();
 

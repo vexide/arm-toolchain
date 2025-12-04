@@ -7,8 +7,8 @@ use tokio_util::sync::CancellationToken;
 use trash::TrashContext;
 
 // pub mod project;
-pub mod toolchain;
 pub mod cli;
+pub mod toolchain;
 
 pub static DIRS: LazyLock<ProjectDirs> = LazyLock::new(|| {
     ProjectDirs::from("dev", "vexide", "arm-toolchain").expect("home directory must be available")

@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use tokio_util::sync::CancellationToken;
 
@@ -78,7 +78,7 @@ async fn enumerate_dir(
         cancel_token.check_cancellation(ToolchainError::Cancelled)?;
 
         let path = entry.path();
-        bytes += Box::pin(enumerate_dir(path, contents_vec, &cancel_token)).await?;
+        bytes += Box::pin(enumerate_dir(path, contents_vec, cancel_token)).await?;
     }
 
     contents_vec.push(Item {

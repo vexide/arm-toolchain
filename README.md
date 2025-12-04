@@ -40,6 +40,8 @@ $ atrun clang -print-targets
     thumbeb    - Thumb (big endian)
 ```
 
+Using `atrun` has the same effect of invoking `arm-toolchain run`, but it's shorter to type.
+
 ### Locate toolchains
 
 Use the `locate` subcommand to get the path to the active toolchain, or a specified one.
