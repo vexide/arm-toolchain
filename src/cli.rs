@@ -171,16 +171,6 @@ pub async fn list() -> Result<(), CliError> {
         println!("- {version}");
     }
 
-    let client = ToolchainClient::using_data_dir().await?;
-
-    let installed = client.installed_versions().await?;
-
-    println!("Installed toolchains:");
-    for version in installed {
-        let toolchain = client.toolchain(&version);
-        println!("- {version} at {}", toolchain.path.display());
-    }
-
     Ok(())
 }
 
