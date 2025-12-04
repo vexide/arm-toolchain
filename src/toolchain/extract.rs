@@ -2,13 +2,9 @@
 //! such as DMG, ZIP, and TAR.XZ.
 
 use std::{
-    fs::Permissions, io::BufReader, path::{Path, PathBuf}, sync::Arc
+    io::BufReader, path::{Path, PathBuf}, sync::Arc
 };
 
-use fs_extra::dir::{
-    CopyOptions, TransitProcess, TransitProcessResult, copy_with_progress, get_dir_content,
-    get_dir_content2,
-};
 use futures::future::try_join_all;
 use liblzma::read::XzDecoder;
 use miette::Diagnostic;
@@ -49,10 +45,6 @@ pub enum ExtractError {
     #[error("The archive did not contain the expected contents")]
     #[diagnostic(code(arm_toolchain::extract::contents_not_found))]
     ContentsNotFound,
-
-    #[error("Failed to read directory while extracting toolchain")]
-    #[diagnostic(code(arm_toolchain::extract::dir_copy_failed))]
-    DirCopy(#[from] fs_extra::error::Error),
 
     #[error("DMG extraction failed")]
     #[diagnostic(code(arm_toolchain::extract::dmg_failed))]

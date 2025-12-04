@@ -1,7 +1,5 @@
 use std::{
-    cell::OnceCell,
-    convert::{Infallible},
-    fmt::{self, Debug, Display},
+    fmt::Debug,
     io::{ErrorKind, SeekFrom},
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
@@ -10,20 +8,21 @@ use std::{
 use camino::Utf8Path;
 use data_encoding::HEXLOWER;
 use futures::{TryStreamExt, future::join_all};
-use miette::Diagnostic;
-use octocrab::{
-    Octocrab,
-    models::repos::{Asset, Release},
-};
+use octocrab::{Octocrab, models::repos::Asset};
 use reqwest::header;
 use sha2::{Digest, Sha256};
-use strum::AsRefStr;
-use thiserror::Error;
 use tokio::io::{self, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio_util::{future::FutureExt as _, sync::CancellationToken};
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::{debug, info, instrument, trace, warn};
 
-use crate::{CheckCancellation, DIRS, TRASH, fs, toolchain::{APP_USER_AGENT, InstallState, InstalledToolchain, ToolchainError, ToolchainRelease, ToolchainVersion, extract}};
+use crate::{
+    CheckCancellation, DIRS, TRASH, fs,
+    toolchain::{
+        APP_USER_AGENT, InstallState, InstalledToolchain, ToolchainError, ToolchainRelease,
+        ToolchainVersion, extract,
+        remove::{RemoveProgress, remove_dir_progress},
+    },
+};
 
 /// A client for downloading and installing the Arm Toolchain for Embedded (ATfE).
 #[derive(Clone)]
@@ -159,11 +158,17 @@ impl ToolchainClient {
         self.install_path_for(version).exists()
     }
 
-    /// Downloads the specified asset, verifies its checksum, extracts it, and installs it to the appropriate location.
+    /// Downloads the specified toolchain asset, verifies its checksum, extracts it,
+    /// and installs it to the appropriate location.
     ///
-    /// Returns the path to the extracted toolchain directory.
+    /// The downloaded toolchain will be activated if there is no other active toolchain. Returns
+    /// the path to the extracted toolchain directory.
+    ///
+    /// # Resuming downloads
     ///
     /// This method will also handle resuming downloads if the file already exists and is partially downloaded.
+    /// If the partially-downloaded file contains invalid bytes, a checksum error will be returned and the file
+    /// will be deleted.
     #[instrument(
         skip(self, release, asset, progress, cancel_token),
         fields(version = release.version().name, asset.name)
@@ -217,6 +222,7 @@ impl ToolchainClient {
             "Checksum verification: {checksums_match}"
         );
         if !checksums_match {
+            fs::remove_file(archive_destination).await?;
             return Err(ToolchainError::ChecksumMismatch {
                 expected: expected_checksum,
                 actual: real_checksum,
@@ -263,13 +269,17 @@ impl ToolchainClient {
             unreachable!("Unsupported file format");
         }
 
+        progress(InstallState::ExtractCleanUp);
+        fs::remove_file(archive_destination).await?;
+
         progress(InstallState::ExtractDone);
 
         debug!("Updating current toolchain if necessary.");
-        if self.current_version().is_none() {
+        if self.active_toolchain().is_none() {
             let new_version = release.version().clone();
             info!(%new_version, "Updating current toolchain");
-            self.set_current_version(Some(release.version().clone())).await?;
+            self.set_active_toolchain(Some(release.version().clone()))
+                .await?;
         }
 
         Ok(extract_location)
@@ -285,6 +295,10 @@ impl ToolchainClient {
         destination: &Path,
         progress: Arc<dyn Fn(InstallState) + Send + Sync>,
     ) -> Result<fs::File, ToolchainError> {
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent).await?;
+        }
+
         let mut file = fs::File::options()
             .read(true)
             .append(true)
@@ -407,11 +421,51 @@ impl ToolchainClient {
         Ok(versions)
     }
 
-    pub fn current_version(&self) -> Option<ToolchainVersion> {
+    /// Delete all files related to the given toolchain version.
+    pub async fn remove(
+        &self,
+        version: &ToolchainVersion,
+        progress: impl FnMut(RemoveProgress),
+        cancel_token: &CancellationToken,
+    ) -> Result<(), ToolchainError> {
+        let dir = self.toolchain(version).path;
+        remove_dir_progress(dir, progress, cancel_token).await?;
+
+        if self.active_toolchain().as_ref() == Some(version) {
+            self.set_active_toolchain(None).await?;
+        }
+
+        Ok(())
+    }
+
+    /// Delete the cache directory, returning the number of bytes deleted.
+    pub async fn purge_cache(&self) -> Result<u64, ToolchainError> {
+        let bytes = async {
+            let mut bytes = 0;
+
+            let mut read_dir = fs::read_dir(&self.cache_path).await?;
+            while let Some(item) = read_dir.next_entry().await? {
+                let meta = item.metadata().await?;
+                bytes += meta.len();
+            }
+
+            Ok::<u64, ToolchainError>(bytes)
+        };
+
+        let bytes = bytes.await.unwrap_or(0);
+        fs::remove_dir_all(&self.cache_path).await?;
+        Ok(bytes)
+    }
+
+    /// Get the version of the active (default) toolchain.
+    pub fn active_toolchain(&self) -> Option<ToolchainVersion> {
         self.current_version.read().unwrap().clone()
     }
 
-    pub async fn set_current_version(
+    /// Set the version of the active (default) toolchain.
+    ///
+    /// This will write the given value to disk.
+    pub async fn set_active_toolchain(
         &self,
         version: Option<ToolchainVersion>,
     ) -> Result<(), ToolchainError> {
@@ -432,6 +486,10 @@ impl ToolchainClient {
         Ok(())
     }
 
+    /// Returns a struct used to access paths of an installed toolchain.
+    ///
+    /// This doesn't check whether the specified version is actually installed,
+    /// so make sure the paths exist before using them.
     pub fn toolchain(&self, version: &ToolchainVersion) -> InstalledToolchain {
         InstalledToolchain::new(self.toolchains_path.join(&version.name))
     }

@@ -6,34 +6,23 @@
 
 use std::{
     cell::OnceCell,
-    convert::Infallible,
     fmt::{self, Debug, Display},
-    io::{ErrorKind, SeekFrom},
-    path::{Path, PathBuf},
-    sync::{Arc, RwLock},
+    path::PathBuf,
+    sync::Arc,
 };
 
-use camino::Utf8Path;
-use data_encoding::HEXLOWER;
-use futures::{TryStreamExt, future::join_all};
 use miette::Diagnostic;
-use octocrab::{
-    Octocrab,
-    models::repos::{Asset, Release},
-};
-use reqwest::header;
-use sha2::{Digest, Sha256};
+use octocrab::models::repos::{Asset, Release};
 use strum::AsRefStr;
 use thiserror::Error;
-use tokio::io::{self, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufReader, BufWriter};
-use tokio_util::{future::FutureExt as _, sync::CancellationToken};
-use tracing::{debug, error, info, instrument, trace, warn};
-
-use crate::{CheckCancellation, DIRS, TRASH, fs, toolchain::extract::ExtractError};
+use tracing::{debug, error, trace};
 
 mod client;
 mod extract;
+mod remove;
+
 pub use client::*;
+pub use remove::RemoveProgress;
 
 static APP_USER_AGENT: &str = concat!(
     "vexide/",
@@ -97,12 +86,6 @@ pub enum ToolchainError {
     #[error(transparent)]
     #[diagnostic(code(arm_toolchain::toolchain::io_error))]
     Io(#[from] std::io::Error),
-}
-
-impl From<fs_extra::error::Error> for ToolchainError {
-    fn from(value: fs_extra::error::Error) -> Self {
-        ExtractError::from(value).into()
-    }
 }
 
 pub enum InstallState {

@@ -1,106 +1,134 @@
-use std::{process::exit, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
-use indicatif::ProgressBar;
+use indicatif::{MultiProgress, ProgressBar};
 use inquire::Confirm;
 use owo_colors::OwoColorize;
+use tokio::task::spawn_blocking;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
     cli::{
-        CliError, PROGRESS_STYLE_DL, PROGRESS_STYLE_EXTRACT, PROGRESS_STYLE_SPINNER,
-        PROGRESS_STYLE_VERIFY, msg,
+        CliError, PROGRESS_STYLE_DL, PROGRESS_STYLE_EXTRACT, PROGRESS_STYLE_EXTRACT_SPINNER, PROGRESS_STYLE_VERIFY, ctrl_c_cancel, msg
     },
     toolchain::{
-        HostArch, HostOS, InstallState, ToolchainClient, ToolchainVersion,
+        HostArch, HostOS, InstallState, ToolchainClient, ToolchainError, ToolchainRelease,
+        ToolchainVersion,
     },
 };
 
 #[derive(Debug, clap::Parser)]
 pub struct InstallArgs {
-    /// Version of LLVM to install
-    pub llvm_version: Option<ToolchainVersion>,
+    /// Version of the toolchain to install
+    pub version: Option<ToolchainVersion>,
     /// Skip install if toolchain is up-to-date.
     #[clap(long, short)]
     pub force: bool,
 }
 
-pub async fn install(cfg: InstallArgs) -> Result<(), CliError> {
-    // let project = Project::find().await?;
-    let toolchain = ToolchainClient::using_data_dir().await?;
+pub async fn install(args: InstallArgs) -> Result<(), CliError> {
+    let client = ToolchainClient::using_data_dir().await?;
 
+    // If "latest" specified we have to figure out what that actually means first
     let toolchain_release;
-    let confirm_message;
     let toolchain_version;
+    let install_latest;
 
-    if let Some(mut version) = cfg.llvm_version
+    if let Some(version) = args.version
         && version.name != "latest"
     {
-        if let Some(bare) = version.name.strip_prefix("v") {
-            version.name = bare.to_string();
-        }
-
+        install_latest = false;
         toolchain_version = version;
-        toolchain_release = toolchain.get_release(&toolchain_version).await?;
-        confirm_message = format!("Download & install LLVM toolchain {toolchain_version}?");
+        toolchain_release = client.get_release(&toolchain_version).await?;
     } else {
-        toolchain_release = toolchain.latest_release().await?;
+        install_latest = true;
+        toolchain_release = client.latest_release().await?;
         toolchain_version = toolchain_release.version().to_owned();
-        confirm_message =
-            format!("Download & install latest LLVM toolchain ({toolchain_version})?");
     }
 
-    if !cfg.force {
-        let already_installed = toolchain.install_path_for(&toolchain_version);
+    if !args.force {
+        let already_installed = client.install_path_for(&toolchain_version);
         if already_installed.exists() {
             println!(
-                "Toolchain up-to-date: {} at {}",
+                "Toolchain already installed: {} at {}",
                 toolchain_version.to_string().bold(),
                 already_installed.display().green()
             );
+
+            if client.active_toolchain().as_ref() == Some(&toolchain_version) {
+                println!(
+                    "(Enable it with the `use {}` subcommand)",
+                    if install_latest {
+                        "latest".to_string()
+                    } else {
+                        toolchain_version.to_string()
+                    }
+                );
+            }
+
             return Ok(());
         }
     }
 
-    let confirmation = Confirm::new(&confirm_message)
-        .with_default(true)
-        .with_help_message("Required support libraries for building C/C++ code. No = cancel")
-        .prompt()?;
+    confirm_install(&toolchain_version, install_latest).await?;
+
+    let old_version = client.active_toolchain();
+
+    let token = ctrl_c_cancel();
+    install_with_progress_bar(&client, &toolchain_release, token.clone()).await?;
+
+    if old_version.is_none() {
+        msg!("Activated", "{toolchain_version}");
+    }
+
+    token.cancel();
+    Ok(())
+}
+
+pub async fn confirm_install(version: &ToolchainVersion, latest: bool) -> Result<(), CliError> {
+    let confirm_message = format!(
+        "Download & install {}ARM toolchain {version}?",
+        if latest { "latest " } else { "" },
+    );
+
+    let confirmation = spawn_blocking(move || {
+        Confirm::new(&confirm_message)
+            .with_default(true)
+            .with_help_message("Required support libraries for building C/C++ code. No = cancel")
+            .prompt()
+    })
+    .await
+    .unwrap()?;
 
     if !confirmation {
         eprintln!("Cancelled.");
-        exit(1);
+        return Err(ToolchainError::Cancelled)?;
     }
 
-    let asset = toolchain_release.asset_for(HostOS::current(), HostArch::current())?;
+    Ok(())
+}
 
-    msg!(
-        "Downloading",
-        "{} <{}>",
-        asset.name.bold(),
-        asset.browser_download_url.green()
-    );
+pub async fn install_with_progress_bar(
+    client: &ToolchainClient,
+    release: &ToolchainRelease,
+    cancel_token: CancellationToken,
+) -> Result<(), CliError> {
+    let asset = release.asset_for(HostOS::current(), HostArch::current())?;
 
-    let cancel_token = CancellationToken::new();
+    msg!("Downloading", "{}", asset.name,);
 
-    tokio::spawn({
-        let cancel_token = cancel_token.clone();
-        async move {
-            tokio::signal::ctrl_c().await.unwrap();
-            cancel_token.cancel();
-            eprintln!("Cancelled.");
-
-            tokio::signal::ctrl_c().await.unwrap();
-            std::process::exit(1);
-        }
-    });
-
+    let multi_bar = MultiProgress::new();
     let download_bar = ProgressBar::no_length().with_style(PROGRESS_STYLE_DL.clone());
+    multi_bar.add(download_bar.clone());
+
     let verify_bar = ProgressBar::no_length()
         .with_style(PROGRESS_STYLE_VERIFY.clone())
         .with_message("Verifying");
+    multi_bar.add(verify_bar.clone());
+
     let extract_bar = ProgressBar::no_length()
         .with_message("Extracting toolchain")
-        .with_style(PROGRESS_STYLE_SPINNER.clone());
+        .with_style(PROGRESS_STYLE_EXTRACT_SPINNER.clone());
+    multi_bar.add(extract_bar.clone());
 
     let progress_handler = Arc::new(move |update| match update {
         InstallState::DownloadBegin {
@@ -131,7 +159,7 @@ pub async fn install(cfg: InstallArgs) -> Result<(), CliError> {
             verify_bar.finish_with_message("Verification complete");
         }
         InstallState::ExtractBegin => {
-            extract_bar.set_style(PROGRESS_STYLE_SPINNER.clone());
+            extract_bar.set_style(PROGRESS_STYLE_EXTRACT_SPINNER.clone());
             extract_bar.enable_steady_tick(Duration::from_millis(300));
         }
         InstallState::ExtractCopy {
@@ -152,9 +180,10 @@ pub async fn install(cfg: InstallArgs) -> Result<(), CliError> {
         }
     });
 
-    let destination = toolchain
-        .download_and_install(&toolchain_release, asset, progress_handler, cancel_token)
+    let destination = client
+        .download_and_install(release, asset, progress_handler, cancel_token)
         .await?;
+
     msg!("Downloaded", "to {}", destination.display());
 
     Ok(())

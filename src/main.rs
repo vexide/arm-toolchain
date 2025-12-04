@@ -1,8 +1,9 @@
-use arm_toolchain::{cli::{ArmToolchainCmd, InstallArgs, RunArgs, install, run}, toolchain::ToolchainClient};
-use clap::Parser;
+use arm_toolchain::cli::{ArmToolchainCmd, STYLES};
+use clap::{Parser, builder::styling};
 use tracing_subscriber::{EnvFilter, util::SubscriberInitExt};
 
 #[derive(clap::Parser)]
+#[clap(version, author, styles(STYLES))]
 enum CliArgs {
     #[clap(flatten)]
     Cmd(ArmToolchainCmd),

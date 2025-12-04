@@ -7,9 +7,15 @@ use crate::{cli::{CliError, get_toolchain}, toolchain::{ToolchainClient, Toolcha
 
 #[derive(Debug, clap::Args)]
 pub struct RunArgs {
+    /// Toolchain version override (default: the active version)
     #[arg(short = 'T', long)]
     toolchain: Option<ToolchainVersion>,
+    /// Set environment variables for cross-compilation
+    #[arg(long, default_value_t = true)]
+    cross_env: bool,
+    /// The command to run with the modified environment
     command: OsString,
+    /// Arguments to pass to the command.
     #[arg(
         trailing_var_arg = true,
         allow_hyphen_values = true,
@@ -31,6 +37,14 @@ pub async fn run(args: RunArgs) -> Result<Never, CliError> {
     let mut cmd = Command::new(args.command);
     cmd.args(args.args);
     cmd.env("PATH", path);
+
+    if args.cross_env {
+        cmd.env("TARGET_CC", "clang");
+        cmd.env("CC", "clang");
+
+        cmd.env("TARGET_AR", "llvm-ar");
+        cmd.env("AR", "llvm-ar");
+    }
 
     let code = cmd.status().await?.code();
     exit(code.unwrap_or(1));
