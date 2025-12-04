@@ -35,6 +35,7 @@ pub mod macos {
     pub async fn extract_dmg(
         _dmg_path: PathBuf,
         _destination_folder: &Path,
+        _progress: Arc<dyn Fn(InstallState) + Send + Sync>,
         _cancel_token: CancellationToken,
     ) -> Result<(), ToolchainError> {
         Err(ExtractError::DmgNotSupported.into())
