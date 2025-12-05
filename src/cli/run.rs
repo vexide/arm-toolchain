@@ -4,7 +4,7 @@ use futures::never::Never;
 use tokio::process::Command;
 
 use crate::{
-    cli::{CliError, get_toolchain},
+    cli::CliError,
     toolchain::{ToolchainClient, ToolchainVersion},
 };
 
@@ -29,7 +29,12 @@ pub struct RunArgs {
 
 pub async fn run(args: RunArgs) -> Result<Never, CliError> {
     let client = ToolchainClient::using_data_dir().await?;
-    let toolchain = get_toolchain(&client, args.toolchain).await?;
+    let version = args
+        .toolchain
+        .or_else(|| client.active_toolchain())
+        .ok_or(CliError::NoToolchainEnabled)?;
+
+    let toolchain = client.toolchain(&version).await?;
 
     let mut path = OsString::from(toolchain.host_bin_dir());
     if let Some(old_path) = env::var_os("PATH") {

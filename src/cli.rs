@@ -1,6 +1,6 @@
 use std::{io, sync::LazyLock};
 
-use crate::toolchain::{InstalledToolchain, ToolchainClient, ToolchainError, ToolchainVersion};
+use crate::toolchain::{ToolchainClient, ToolchainError, ToolchainVersion};
 use clap::builder::styling;
 use humansize::DECIMAL;
 use indicatif::ProgressStyle;
@@ -16,7 +16,7 @@ pub enum CliError {
 
     #[error(transparent)]
     #[diagnostic(transparent)]
-    Toolchain(#[from] ToolchainError),
+    Toolchain(ToolchainError),
 
     #[error("No ARM toolchain is enabled on this system")]
     #[diagnostic(code(arm_toolchain::cli::no_toolchain_enabled))]
@@ -36,6 +36,18 @@ pub enum CliError {
     #[error("The toolchain {:?} is not installed.", version.name)]
     #[diagnostic(code(arm_toolchain::cli::remove_missing))]
     CannotRemoveMissingToolchain { version: ToolchainVersion },
+}
+
+impl From<ToolchainError> for CliError {
+    fn from(value: ToolchainError) -> Self {
+        match value {
+            // CLI version has a different help message.
+            ToolchainError::ToolchainNotInstalled { version } => {
+                Self::ToolchainNotInstalled { version }
+            }
+            other => Self::Toolchain(other),
+        }
+    }
 }
 
 impl From<io::Error> for CliError {
@@ -127,7 +139,12 @@ enum LocateWhat {
 
 pub async fn locate(args: LocateArgs) -> Result<(), CliError> {
     let client = ToolchainClient::using_data_dir().await?;
-    let toolchain = get_toolchain(&client, args.toolchain).await?;
+    let version = args
+        .toolchain
+        .or_else(|| client.active_toolchain())
+        .ok_or(CliError::NoToolchainEnabled)?;
+
+    let toolchain = client.toolchain(&version).await?;
 
     match args.what {
         LocateWhat::InstallDir => {
@@ -184,23 +201,6 @@ pub async fn purge_cache() -> Result<(), CliError> {
     );
 
     Ok(())
-}
-
-/// Get an installed toolchain's path data, verifying that it is installed.
-pub async fn get_toolchain(
-    client: &ToolchainClient,
-    version: Option<ToolchainVersion>,
-) -> Result<InstalledToolchain, CliError> {
-    let version = version
-        .or_else(|| client.active_toolchain())
-        .ok_or(CliError::NoToolchainEnabled)?;
-
-    let installed_toolchains = client.installed_versions().await?;
-    if !installed_toolchains.contains(&version) {
-        return Err(CliError::ToolchainNotInstalled { version });
-    }
-
-    Ok(client.toolchain(&version))
 }
 
 macro_rules! msg {

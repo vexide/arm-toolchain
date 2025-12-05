@@ -74,6 +74,10 @@ pub enum ToolchainError {
     #[diagnostic(code(arm_toolchain::toolchain::cancelled))]
     Cancelled,
 
+    #[error("The toolchain {:?} is not installed.", version.name)]
+    #[diagnostic(code(arm_toolchain::toolchain::not_installed))]
+    ToolchainNotInstalled { version: ToolchainVersion },
+
     #[error("A request to the GitHub API failed")]
     #[diagnostic(code(arm_toolchain::toolchain::github_api))]
     GitHubApi(#[from] octocrab::Error),
@@ -283,6 +287,7 @@ impl From<&str> for ToolchainVersion {
     }
 }
 
+/// An ARM toolchain that may be installed on the current system.
 pub struct InstalledToolchain {
     pub path: PathBuf,
 }
@@ -290,6 +295,18 @@ pub struct InstalledToolchain {
 impl InstalledToolchain {
     pub fn new(path: PathBuf) -> Self {
         Self { path }
+    }
+
+    pub async fn check_installed(&self) -> Result<(), ToolchainError> {
+        if !self.path.exists() {
+            return Err(ToolchainError::ToolchainNotInstalled {
+                version: ToolchainVersion::named(
+                    self.path.file_name().unwrap_or_default().to_string_lossy(),
+                ),
+            });
+        }
+
+        Ok(())
     }
 
     /// Returns the path to a directory containing binaries that run on the host.

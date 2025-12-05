@@ -428,8 +428,9 @@ impl ToolchainClient {
         progress: impl FnMut(RemoveProgress),
         cancel_token: &CancellationToken,
     ) -> Result<(), ToolchainError> {
-        let dir = self.toolchain(version).path;
-        remove_dir_progress(dir, progress, cancel_token).await?;
+        if let Ok(toolchain) = self.toolchain(version).await {
+            remove_dir_progress(toolchain.path, progress, cancel_token).await?;
+        }
 
         if self.active_toolchain().as_ref() == Some(version) {
             self.set_active_toolchain(None).await?;
@@ -490,8 +491,13 @@ impl ToolchainClient {
     ///
     /// This doesn't check whether the specified version is actually installed,
     /// so make sure the paths exist before using them.
-    pub fn toolchain(&self, version: &ToolchainVersion) -> InstalledToolchain {
-        InstalledToolchain::new(self.toolchains_path.join(&version.name))
+    pub async fn toolchain(
+        &self,
+        version: &ToolchainVersion,
+    ) -> Result<InstalledToolchain, ToolchainError> {
+        let toolchain = InstalledToolchain::new(self.toolchains_path.join(&version.name));
+        toolchain.check_installed().await?;
+        Ok(toolchain)
     }
 }
 
