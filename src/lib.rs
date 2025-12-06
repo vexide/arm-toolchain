@@ -6,7 +6,6 @@ pub(crate) use fs_err::tokio as fs;
 use tokio_util::sync::CancellationToken;
 use trash::TrashContext;
 
-// pub mod project;
 pub mod cli;
 pub mod toolchain;
 
