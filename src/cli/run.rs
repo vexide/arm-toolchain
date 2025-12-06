@@ -14,10 +14,10 @@ pub struct RunArgs {
     /// Toolchain version override (default: the active version)
     #[arg(short = 'T', long)]
     toolchain: Option<ToolchainVersion>,
-    /// Disable environment variables set for cross-compilation
+    /// Do not set extra environment variables to enable cross-compilation.
     #[arg(long)]
     no_cross_env: bool,
-    /// The command to run with the modified environment
+    /// The command to run with the modified environment.
     command: OsString,
     /// Arguments to pass to the command.
     #[arg(

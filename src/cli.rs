@@ -62,17 +62,54 @@ impl From<io::Error> for CliError {
 #[derive(Debug, clap::Subcommand)]
 pub enum ArmToolchainCmd {
     /// Install, verify, and extract a version of the ARM Embedded Toolchain.
+    ///
+    /// Toolchains are installed per-user in a platform-specific data directory.
+    /// If there is another toolchain already installed, that toolchain will still
+    /// be used after installing this one.
+    ///
+    /// If you would like to enable a toolchain you've installed, or install and enable
+    /// a toolchain all at once, invoke the `use` command instead.
+    #[clap(
+        visible_alias("add"),
+        visible_alias("i"),
+    )]
     Install(InstallArgs),
-    /// Uninstall a single toolchain version or all versions.
-    #[clap(visible_alias("uninstall"))]
+    /// Uninstall a single toolchain version, or all versions.
+    ///
+    /// When a toolchain is uninstalled, it is unset as the current toolchain and deleted
+    /// from the toolchains directory and download cache.
+    ///
+    /// If "all" is specified as the version to remove, every toolchain on the system will be
+    /// uninstalled.
+    #[clap(
+        visible_alias("uninstall"),
+        visible_alias("rm"),
+    )]
     Remove(RemoveArgs),
-    /// Run a command with the active toolchain added to the PATH.
+    /// Run a command with the active toolchain added to the `PATH`.
+    ///
+    /// Unless you specify `--no-cross-env`, the `TARGET_CC` and `TARGET_AR` environment
+    /// variables will also be set to `clang` and `llvm-ar` respectively. These will resolve
+    /// to the toolchain's versions of clang and llvm-ar.
+    ///
+    /// An alias for this command is the external `atrun` executable. You may need to pass an
+    /// extra `--` to the command if some flags look like ones `arm-toolchain` would accept.
     Run(RunArgs),
     /// Print the path of the active toolchain.
+    #[clap(
+        visible_alias("which"),
+        visible_alias("where"),
+        visible_alias("print"),
+    )]
     Locate(LocateArgs),
     /// Active a desired version of the ARM Embedded Toolchain, downloading it if necessary.
+    #[clap(
+        visible_alias("set"),
+        visible_alias("activate"),
+    )]
     Use(UseArgs),
     /// List all installed toolchain versions and the current active version.
+    #[clap(visible_alias("ls"))]
     List,
     /// Delete the cache which stores incomplete downloads.
     PurgeCache,
