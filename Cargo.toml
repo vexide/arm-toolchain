@@ -11,6 +11,7 @@ categories = [
 ]
 keywords = ["arm", "embedded", "cross-compilation", "toolchain-management"]
 repository = "https://github.com/vexide/arm-toolchain"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 camino = "1.2.1"
