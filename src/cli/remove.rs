@@ -8,12 +8,14 @@ use crate::{
     toolchain::{RemoveProgress, ToolchainClient, ToolchainError, ToolchainVersion},
 };
 
+/// Configuration for [`remove`].
 #[derive(Debug, clap::Parser)]
 pub struct RemoveArgs {
     /// Version of toolchain to remove, or "all"
     pub version: ToolchainVersion,
 }
 
+/// Remove a toolchain from the system.
 pub async fn remove(args: RemoveArgs) -> Result<(), CliError> {
     let client = ToolchainClient::using_data_dir().await?;
     let toolchains = client.installed_versions().await?;

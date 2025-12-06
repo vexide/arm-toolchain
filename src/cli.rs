@@ -11,7 +11,7 @@ use tokio_util::{future::FutureExt, sync::CancellationToken};
 #[derive(Debug, Error, Diagnostic)]
 pub enum CliError {
     #[error(transparent)]
-    #[diagnostic(code(arm_toolchain::cli::nteractive_prompt_failed))]
+    #[diagnostic(code(arm_toolchain::cli::interactive_prompt_failed))]
     Inquire(#[from] inquire::InquireError),
 
     #[error(transparent)]
@@ -79,6 +79,7 @@ pub enum ArmToolchainCmd {
 }
 
 impl ArmToolchainCmd {
+    /// Run the command.
     pub async fn run(self) -> Result<(), CliError> {
         match self {
             ArmToolchainCmd::Install(config) => {
@@ -120,23 +121,32 @@ pub use use_cmd::*;
 mod remove;
 pub use remove::*;
 
+/// Options for locating a toolchain.
 #[derive(Debug, clap::Args)]
 pub struct LocateArgs {
+    /// The toolchain that should be located.
     #[arg(short = 'T', long)]
     toolchain: Option<ToolchainVersion>,
+    /// Which path should be displayed.
     #[clap(default_value = "install-dir")]
     what: LocateWhat,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, clap::ValueEnum)]
 enum LocateWhat {
+    /// The root directory, where the toolchain is installed.
     #[default]
     InstallDir,
+    /// The `/bin` directory, where executables are stored (e.g. clang).
     Bin,
+    /// The `/lib` directory, where libraries are stored (e.g. libLTO.dylib).
     Lib,
+    /// The multilib directory, where cross-compilation libraries are stored
+    /// for various platforms (e.g. libc.a).
     Multilib,
 }
 
+/// Locate a toolchain's path and print it to stdio.
 pub async fn locate(args: LocateArgs) -> Result<(), CliError> {
     let client = ToolchainClient::using_data_dir().await?;
     let version = args
@@ -164,6 +174,7 @@ pub async fn locate(args: LocateArgs) -> Result<(), CliError> {
     Ok(())
 }
 
+/// Print a list of all toolchains to stdio.
 pub async fn list() -> Result<(), CliError> {
     let client = ToolchainClient::using_data_dir().await?;
 
@@ -191,6 +202,7 @@ pub async fn list() -> Result<(), CliError> {
     Ok(())
 }
 
+/// Purge the download cache and print results to stdio.
 pub async fn purge_cache() -> Result<(), CliError> {
     let client = ToolchainClient::using_data_dir().await?;
     let bytes = client.purge_cache().await?;
@@ -213,6 +225,11 @@ macro_rules! msg {
 }
 pub(crate) use msg;
 
+/// Create a cancel token that will trigger when Ctrl-C (SIGINT on Unix) is pressed.
+///
+/// If the token is cancelled manually, Ctrl-C's behavior will return to exiting the
+/// process. It is advised to not call this function in a loop because it creates a
+/// Tokio task that only exits after Ctrl-C is pressed twice.
 pub fn ctrl_c_cancel() -> CancellationToken {
     let cancel_token = CancellationToken::new();
 

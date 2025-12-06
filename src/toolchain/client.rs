@@ -52,7 +52,8 @@ impl ToolchainClient {
 
     /// Creates a new toolchain client that installs to a platform-specific data directory.
     ///
-    /// For example, on macOS this is `~/Library/Application Support/dev.vexide.swift-v5/llvm-toolchains`.
+    /// For example, on macOS this is
+    /// `~/Library/Application Support/dev.vexide.arm-toolchain/llvm-toolchains`.
     pub async fn using_data_dir() -> Result<Self, ToolchainError> {
         Self::new(
             DIRS.data_local_dir().join("llvm-toolchains"),
@@ -501,7 +502,7 @@ impl ToolchainClient {
     }
 }
 
-/// Scans the entire file and calculates its SHA256 checksum.
+/// Scans an entire file and calculates its SHA256 checksum.
 async fn calculate_file_checksum(
     file: &mut fs::File,
     progress: Arc<dyn Fn(InstallState) + Send + Sync>,

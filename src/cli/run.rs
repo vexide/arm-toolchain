@@ -8,6 +8,7 @@ use crate::{
     toolchain::{ToolchainClient, ToolchainVersion},
 };
 
+/// Configuration for [`run`].
 #[derive(Debug, clap::Args)]
 pub struct RunArgs {
     /// Toolchain version override (default: the active version)
@@ -27,6 +28,7 @@ pub struct RunArgs {
     args: Vec<OsString>,
 }
 
+/// Run a CLI tool with the toolchain in the PATH.
 pub async fn run(args: RunArgs) -> Result<Never, CliError> {
     let client = ToolchainClient::using_data_dir().await?;
     let version = args

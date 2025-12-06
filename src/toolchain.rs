@@ -1,8 +1,15 @@
-//! This module provides functionality to download and install the Arm Toolchain for Embedded (ATfE).
+//! Install and manage the Arm Toolchain for Embedded (ATfE).
 //!
 //! The included [`ToolchainClient`] can be used to fetch the latest release from the Arm GitHub repository,
 //! download the appropriate asset for the current host OS and architecture, and install it to a specified
 //! directory. It also handles checksum verification and extraction of the downloaded archive.
+//!
+//! Toolchains are installed per-user in a platform-specific data directory managed by the library.
+//! It is recommended that you use the library's default data directory by creating a toolchain client via the
+//! [`ToolchainClient::using_data_dir`] function.
+//!
+//! Once you've installed a toolchain, get a handle to it with [`ToolchainClient::toolchain`]. This will
+//! allow you to access information such as the filesystem directory where its executables are contained.
 
 use std::{
     cell::OnceCell,

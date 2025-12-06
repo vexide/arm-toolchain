@@ -17,6 +17,7 @@ use crate::{
     },
 };
 
+/// Configuration for [`install`].
 #[derive(Debug, clap::Parser)]
 pub struct InstallArgs {
     /// Version of the toolchain to install
@@ -26,6 +27,7 @@ pub struct InstallArgs {
     pub force: bool,
 }
 
+/// Remove a toolchain to the system.
 pub async fn install(args: InstallArgs) -> Result<(), CliError> {
     let client = ToolchainClient::using_data_dir().await?;
 
